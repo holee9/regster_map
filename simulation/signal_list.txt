@@ -1,0 +1,354 @@
+//==============================================================================
+// Project     : BLUE Platform - X-ray Detector System
+// Module      : signal_list.txt
+// Description : Complete Signal List for Register Map Module
+//               Input/Output signals organized by function
+//
+// Copyright (c) 2024-2025 H&abyz Inc.
+// All rights reserved.
+//
+// Author      : drake.lee (holee9@gmail.com)
+// Company     : H&abyz Inc.
+// Created     : 2025-12-05
+//
+//==============================================================================
+
+================================================================================
+1. CLOCK AND RESET SIGNALS
+================================================================================
+[INPUT] eim_clk              - EIM interface clock (100 MHz)
+[INPUT] eim_rst              - EIM clock domain reset (active high)
+[INPUT] fsm_clk              - FSM clock domain (20 MHz)
+[INPUT] rst                  - FSM clock domain reset (active high)
+
+================================================================================
+2. FSM STATE INPUT SIGNALS (from main FSM controller)
+================================================================================
+[INPUT] fsm_rst_index        - FSM state: RESET (3'b000)
+[INPUT] fsm_init_index       - FSM state: INIT (3'b001)
+[INPUT] fsm_back_bias_index  - FSM state: BACK_BIAS (3'b010)
+[INPUT] fsm_flush_index      - FSM state: FLUSH (3'b011)
+[INPUT] fsm_aed_read_index   - FSM state: AED_READ (3'b100)
+[INPUT] fsm_exp_index        - FSM state: EXPOSURE (3'b101)
+[INPUT] fsm_read_index       - FSM state: READ (3'b110)
+[INPUT] fsm_idle_index       - FSM state: IDLE (3'b111)
+
+Note: One-hot encoded state signals from main FSM
+      Only one signal should be high at any time
+
+================================================================================
+3. SYSTEM STATUS INPUT SIGNALS
+================================================================================
+[INPUT] ready_to_get_image   - System ready to acquire image
+                               Used in FSM_REG[3]
+                               
+[INPUT] aed_ready_done       - AED (Auto Exposure Detection) ready status
+                               Used in FSM_REG[4]
+                               
+[INPUT] panel_stable_exist   - Panel bias voltage stabilized
+                               Used in FSM_REG[6]
+                               
+[INPUT] exp_read_exist       - Exposure or read operation in progress
+                               Used in FSM_REG[5]
+
+================================================================================
+4. REGISTER ACCESS INTERFACE (EIM Bus - 100MHz domain)
+================================================================================
+[INPUT] reg_read_index       - Register read request strobe
+                               Active high pulse for read operation
+                               
+[INPUT] reg_addr[15:0]       - Register address (0x0000 ~ 0x01FF)
+                               512 register address space
+                               Valid range: 0x0000 ~ 0x01FF
+                               
+[INPUT] reg_data[15:0]       - Register write data
+                               16-bit data for register write
+                               
+[INPUT] reg_data_index       - Register write enable strobe
+                               Active high pulse for write operation
+
+================================================================================
+5. REGISTER READ OUTPUT INTERFACE
+================================================================================
+[OUTPUT] reg_read_out[15:0]  - Register read data output
+                               16-bit data from selected register
+                               Valid when read_data_en is high
+                               
+[OUTPUT] read_data_en        - Read data valid signal
+                               Indicates reg_read_out contains valid data
+                               Registered version of reg_read_index
+
+================================================================================
+6. SYSTEM CONTROL OUTPUT SIGNALS (Phase 0 - Implemented)
+================================================================================
+[OUTPUT] state_led_ctr[7:0]  - LED control for state indication
+                               From register: STATE_LED_CTR (0x0001)
+                               Used for external LED status display
+                               
+[OUTPUT] reg_map_sel         - Register map selection
+                               From register: REG_MAP_SEL (0x0000)
+                               Bit 0: Selection control bit
+
+================================================================================
+7. PHASE 1 OUTPUT SIGNALS (TODO - System Control & GATE)
+================================================================================
+System Reset and Control:
+------------------------
+[OUTPUT] system_rst          - System-level reset control
+                               From: SYS_CMD_REG[0] (0x0002)
+                               
+[OUTPUT] reset_fsm           - FSM reset control (edge-triggered)
+                               From: SYS_CMD_REG[1] (0x0002)
+                               Requires edge detection logic
+                               
+[OUTPUT] en_pwr_dwn          - Power down enable
+                               From: OP_MODE_REG[?] (0x0003)
+                               
+[OUTPUT] en_pwr_off          - Power off enable
+                               From: OP_MODE_REG[?] (0x0003)
+
+Image Acquisition Commands:
+---------------------------
+[OUTPUT] get_dark            - Dark frame acquisition command
+                               From: SYS_CMD_REG[?]
+                               
+[OUTPUT] get_bright          - Bright frame acquisition command
+                               From: SYS_CMD_REG[?]
+                               
+[OUTPUT] cmd_get_bright      - Bright frame acquisition trigger
+                               From: SYS_CMD_REG[?]
+                               
+[OUTPUT] burst_get_image     - Burst image acquisition mode
+                               From: OP_MODE_REG[?]
+                               
+[OUTPUT] dummy_get_image     - Dummy image acquisition
+                               From: OP_MODE_REG[?]
+                               
+[OUTPUT] exp_ack             - Exposure acknowledgment
+                               From: SYS_CMD_REG[?]
+
+GATE Control (17 signals):
+--------------------------
+[OUTPUT] gate_mode1          - Gate control mode 1
+                               From: SET_GATE[?] (0x0004)
+                               
+[OUTPUT] gate_mode2          - Gate control mode 2
+                               From: SET_GATE[?] (0x0004)
+                               
+[OUTPUT] gate_cs1            - Gate chip select 1
+                               From: SET_GATE[?] (0x0004)
+                               
+[OUTPUT] gate_cs2            - Gate chip select 2
+                               From: SET_GATE[?] (0x0004)
+                               
+[OUTPUT] gate_sel            - Gate selection
+                               From: SET_GATE[?] (0x0004)
+                               
+[OUTPUT] stv_sel_* (12 bits) - STV selection signals
+                               From: SET_GATE register bits
+
+================================================================================
+8. PHASE 2 OUTPUT SIGNALS (TODO - Timing & FSM Multiplexing)
+================================================================================
+Timing Control (FSM-based multiplexing required):
+-------------------------------------------------
+[OUTPUT] cycle_width[23:0]   - Cycle width for current FSM state
+                               Multiplexed from multiple registers:
+                               - INIT_CYCLE_WIDTH (0x0010)
+                               - BACK_BIAS_CYCLE_WIDTH (0x0011~0x0012)
+                               - FLUSH_CYCLE_WIDTH (0x0013~0x0014)
+                               - READ_CYCLE_WIDTH (0x0015~0x0016)
+                               - IDLE_CYCLE_WIDTH (0x0017~0x0018)
+                               
+[INPUT]  readout_width[23:0] - Readout width from ADC module
+                               New input port needed for multiplexing
+                               
+[OUTPUT] mux_image_height[15:0] - Multiplexed image height
+                               Based on FSM state and mode
+                               
+[OUTPUT] frame_rpt[15:0]     - Frame repeat count
+                               Different values for back_bias vs flush
+
+CSI-2 Interface:
+---------------
+[OUTPUT] max_v_count[15:0]   - Maximum vertical count for CSI-2
+[OUTPUT] max_h_count[23:0]   - Maximum horizontal count for CSI-2
+[OUTPUT] csi2_word_count[15:0] - CSI-2 word count
+
+================================================================================
+9. PHASE 3 OUTPUT SIGNALS (TODO - AED System)
+================================================================================
+AED Control:
+-----------
+[OUTPUT] aed_th[15:0]        - AED threshold value
+                               From: AED_TH (0x00??)
+                               
+[OUTPUT] nega_aed_th[15:0]   - Negative AED threshold
+                               From: NEGA_AED_TH (0x00??)
+                               
+[OUTPUT] posi_aed_th[15:0]   - Positive AED threshold
+                               From: POSI_AED_TH (0x00??)
+
+Gate XAO Outputs (12 signals - 6 pairs of H/L):
+-----------------------------------------------
+[OUTPUT] gate_xao_0_h[15:0]  - Gate XAO 0 high word
+[OUTPUT] gate_xao_0_l[15:0]  - Gate XAO 0 low word
+[OUTPUT] gate_xao_1_h[15:0]  - Gate XAO 1 high word
+[OUTPUT] gate_xao_1_l[15:0]  - Gate XAO 1 low word
+[OUTPUT] gate_xao_2_h[15:0]  - Gate XAO 2 high word
+[OUTPUT] gate_xao_2_l[15:0]  - Gate XAO 2 low word
+[OUTPUT] gate_xao_3_h[15:0]  - Gate XAO 3 high word
+[OUTPUT] gate_xao_3_l[15:0]  - Gate XAO 3 low word
+[OUTPUT] gate_xao_4_h[15:0]  - Gate XAO 4 high word
+[OUTPUT] gate_xao_4_l[15:0]  - Gate XAO 4 low word
+[OUTPUT] gate_xao_5_h[15:0]  - Gate XAO 5 high word
+[OUTPUT] gate_xao_5_l[15:0]  - Gate XAO 5 low word
+
+Additional AED Signals:
+----------------------
+[OUTPUT] aed_* (additional)  - Other AED-related control signals
+                               To be identified from original code
+
+================================================================================
+10. PHASE 4 OUTPUT SIGNALS (TODO - ROIC Control)
+================================================================================
+TI ROIC Control:
+---------------
+[OUTPUT] ti_roic_sync        - TI ROIC synchronization signal
+[OUTPUT] ti_roic_str         - TI ROIC strobe signal
+[OUTPUT] ti_roic_* (others)  - Additional TI ROIC control signals
+
+Deserializer Control:
+--------------------
+[OUTPUT] des_* (8+ signals)  - Deserializer control signals
+                               Multiple control bits for LVDS deserializer
+
+Burst Mode Control:
+------------------
+[OUTPUT] burst_* (multiple)  - Burst mode control signals
+
+================================================================================
+11. PHASE 5 OUTPUT SIGNALS (TODO - Sequence Table)
+================================================================================
+Sequence LUT:
+------------
+[OUTPUT] seq_lut_* (8 signals) - Sequence lookup table signals
+                                 For programmable timing sequences
+                                 
+[OUTPUT] acq_mode[7:0]         - Acquisition mode control
+                                 Different readout modes
+
+================================================================================
+12. IMPLEMENTATION STATUS SUMMARY
+================================================================================
+Phase 0 (COMPLETED - 5%):
+-------------------------
+✅ Basic register memory array (512 registers)
+✅ Register read/write logic
+✅ Read-only register protection
+✅ FSM_REG with state and status tracking
+✅ FPGA version read (USR_ACCESSE2)
+✅ state_led_ctr output
+✅ reg_map_sel output
+
+Phase 1-6 (TODO - 95%):
+----------------------
+❌ System control signals (37 signals)
+❌ FSM-based timing multiplexing (11 signals)
+❌ AED system control (21 signals)
+❌ ROIC control (22 signals)
+❌ Sequence table control (8 signals)
+❌ Clock domain crossing (CDC) logic
+❌ Edge detection for control signals
+❌ Value adjustment logic
+
+================================================================================
+13. REGISTER ADDRESS MAP (Key Registers)
+================================================================================
+0x0000 - REG_MAP_SEL        - Register map selection
+0x0001 - STATE_LED_CTR      - LED control for state display
+0x0002 - SYS_CMD_REG        - System command register
+0x0003 - OP_MODE_REG        - Operation mode register
+0x0004 - SET_GATE           - GATE control register
+
+0x0010 - INIT_CYCLE_WIDTH   - INIT state cycle width
+0x0011 - BACK_BIAS_CYCLE_L  - BACK_BIAS cycle width low
+0x0012 - BACK_BIAS_CYCLE_H  - BACK_BIAS cycle width high
+...
+
+0x00FF - FSM_REG            - FSM state and status (read-only)
+                              [7]   - Reserved
+                              [6]   - panel_stable_exist
+                              [5]   - exp_read_exist
+                              [4]   - aed_ready_done
+                              [3]   - ready_to_get_image
+                              [2:0] - FSM state
+
+0x0100 - ROIC_VENDOR        - ROIC vendor ID (read-only)
+0x0101 - PURPOSE            - Panel purpose (read-only)
+0x0102 - SIZE_1             - Panel size 1 (read-only)
+0x0103 - SIZE_2             - Panel size 2 (read-only)
+
+0x0110 - FPGA_VER_H         - FPGA version high (read-only)
+0x0111 - FPGA_VER_L         - FPGA version low (read-only)
+
+================================================================================
+14. TIMING SPECIFICATIONS
+================================================================================
+EIM Clock Domain:
+----------------
+- Frequency: 100 MHz
+- Period: 10 ns
+- Used for: Register access interface
+
+FSM Clock Domain:
+----------------
+- Frequency: 20 MHz
+- Period: 50 ns
+- Used for: FSM state updates, system control
+
+Clock Domain Crossing:
+---------------------
+- Required between eim_clk (100MHz) and fsm_clk (20MHz)
+- CDC logic needed for status signals
+- Synchronizers required for control signals crossing domains
+
+Register Access Timing:
+----------------------
+Write Operation:
+  - reg_addr and reg_data setup
+  - reg_data_index pulse (1 clock)
+  - Data written to register_memory
+
+Read Operation:
+  - reg_addr setup
+  - reg_read_index pulse (1 clock)
+  - reg_read_out valid after 2 clocks
+  - read_data_en indicates valid data
+
+================================================================================
+15. SIGNAL DIRECTION SUMMARY
+================================================================================
+Total Input Signals:  16
+  - Clocks and resets: 4
+  - FSM state inputs: 8
+  - System status: 4
+  - Register interface: 4 (addr, data, read_index, data_index)
+
+Total Output Signals (Current): 3
+  - reg_read_out[15:0]
+  - read_data_en
+  - state_led_ctr[7:0]
+  - reg_map_sel
+
+Total Output Signals (After Full Implementation): 150+
+  - Phase 1: 37 additional signals
+  - Phase 2: 11 additional signals
+  - Phase 3: 21 additional signals
+  - Phase 4: 22 additional signals
+  - Phase 5: 8 additional signals
+  - Phase 6: Architecture improvements
+
+================================================================================
+End of signal_list.txt
+================================================================================
