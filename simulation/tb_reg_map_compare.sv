@@ -570,6 +570,16 @@ module tb_reg_map_compare;
     wire          orig_reset_fsm;
     wire          orig_get_dark;
     wire          orig_get_bright;
+    wire          orig_cmd_get_bright;
+    wire          orig_dummy_get_image;
+    wire          orig_burst_get_image;
+    wire          orig_en_panel_stable;
+    wire          orig_en_16bit_adc;
+    wire          orig_en_test_pattern_col;
+    wire          orig_en_test_pattern_row;
+    wire          orig_en_test_roic_col;
+    wire          orig_en_test_roic_row;
+    wire          orig_exp_ack;
     wire [7:0]    orig_state_led_ctr;
     wire [15:0]   orig_max_v_count;
     wire [15:0]   orig_max_h_count;
@@ -590,6 +600,18 @@ module tb_reg_map_compare;
     wire          refac_system_rst;
     wire          refac_org_reset_fsm;
     wire          refac_reset_fsm;
+    wire          refac_get_dark;
+    wire          refac_get_bright;
+    wire          refac_cmd_get_bright;
+    wire          refac_dummy_get_image;
+    wire          refac_burst_get_image;
+    wire          refac_en_panel_stable;
+    wire          refac_en_16bit_adc;
+    wire          refac_en_test_pattern_col;
+    wire          refac_en_test_pattern_row;
+    wire          refac_en_test_roic_col;
+    wire          refac_en_test_roic_row;
+    wire          refac_exp_ack;
     wire [15:0]   refac_max_v_count;
     wire [15:0]   refac_max_h_count;
     wire [15:0]   refac_csi2_word_count;
@@ -693,14 +715,14 @@ module tb_reg_map_compare;
         .reset_fsm              (orig_reset_fsm),
         .get_dark               (orig_get_dark),
         .get_bright             (orig_get_bright),
+        .cmd_get_bright         (orig_cmd_get_bright),
+        .dummy_get_image        (orig_dummy_get_image),
+        .burst_get_image        (orig_burst_get_image),
         
         // Connect remaining outputs to prevent warnings
         .en_pwr_dwn             (),
         .en_pwr_off             (),
         .org_reset_fsm          (),
-        .dummy_get_image        (),
-        .burst_get_image        (),
-        .cmd_get_bright         (),
         .en_aed                 (),
         .aed_th                 (),
         .nega_aed_th            (),
@@ -712,7 +734,6 @@ module tb_reg_map_compare;
         .aed_dark_delay         (),
         .en_back_bias           (),
         .en_flush               (),
-        .en_panel_stable        (),
         .cycle_width            (),
         .mux_image_height       (),
         .dsp_image_height       (),
@@ -767,11 +788,12 @@ module tb_reg_map_compare;
         .ld_io_delay_tab        (),
         .io_delay_tab           (),
         .gate_size              (),
-        .en_16bit_adc           (),
-        .en_test_pattern_col    (),
-        .en_test_pattern_row    (),
-        .en_test_roic_col       (),
-        .en_test_roic_row       (),
+        .en_panel_stable        (orig_en_panel_stable),
+        .en_16bit_adc           (orig_en_16bit_adc),
+        .en_test_pattern_col    (orig_en_test_pattern_col),
+        .en_test_pattern_row    (orig_en_test_pattern_row),
+        .en_test_roic_col       (orig_en_test_roic_col),
+        .en_test_roic_row       (orig_en_test_roic_row),
         .aed_test_mode1         (),
         .aed_test_mode2         (),
         .seq_lut_addr           (),
@@ -783,7 +805,7 @@ module tb_reg_map_compare;
         .acq_expose_size        (),
         .up_switch_sync         (),
         .dn_switch_sync         (),
-        .exp_ack                ()
+        .exp_ack                (orig_exp_ack)
     );
 
     //==========================================================================
@@ -823,6 +845,18 @@ module tb_reg_map_compare;
         .system_rst             (refac_system_rst),
         .org_reset_fsm          (refac_org_reset_fsm),
         .reset_fsm              (refac_reset_fsm),
+        .get_dark               (refac_get_dark),
+        .get_bright             (refac_get_bright),
+        .cmd_get_bright         (refac_cmd_get_bright),
+        .dummy_get_image        (refac_dummy_get_image),
+        .burst_get_image        (refac_burst_get_image),
+        .en_panel_stable        (refac_en_panel_stable),
+        .en_16bit_adc           (refac_en_16bit_adc),
+        .en_test_pattern_col    (refac_en_test_pattern_col),
+        .en_test_pattern_row    (refac_en_test_pattern_row),
+        .en_test_roic_col       (refac_en_test_roic_col),
+        .en_test_roic_row       (refac_en_test_roic_row),
+        .exp_ack                (refac_exp_ack),
         
         .max_v_count            (refac_max_v_count),
         .max_h_count            (refac_max_h_count),

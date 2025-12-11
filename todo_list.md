@@ -1,6 +1,7 @@
 # Register Map Refactoring TODO List
 
-## 작업 날짜: 2025년 12월 5일
+## 작업 날짜: 2025년 12월 10일 (Updated)
+## 최근 업데이트: exp_ack 구현 완료 - Pass Rate: 29% (변화없음)
 
 ## 1. 원본 모듈 심층 분석 (reg_map.sv)
 

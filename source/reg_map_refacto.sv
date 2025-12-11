@@ -65,6 +65,7 @@ module reg_map_refacto (
     input  wire         aed_ready_done,     // AED ready done flag
     input  wire         panel_stable_exist, // Panel stable flag
     input  wire         exp_read_exist,     // Exposure/Read exist flag
+    input  wire         exp_req,            // Exposure request
 
     //==========================================================================
     // Register Access Interface
@@ -135,7 +136,58 @@ module reg_map_refacto (
     
     // Acquisition Mode Outputs
     output logic [2:0]  acq_mode,           // Acquisition mode
-    output logic [31:0] acq_expose_size     // Acquisition exposure size (extended to 32-bit)
+    output logic [31:0] acq_expose_size,    // Acquisition exposure size (extended to 32-bit)
+    
+    // Image Command Outputs
+    output logic        get_dark,           // Get dark image command
+    output logic        get_bright,         // Get bright image command
+    output logic        cmd_get_bright,     // Command get bright
+    output logic        dummy_get_image,    // Dummy get image
+    output logic        burst_get_image,    // Burst get image
+
+    // OP_MODE_REG Outputs
+    output logic        en_panel_stable,    // Panel stable enable (OP_MODE_REG[1])
+    output logic        en_16bit_adc,       // 16-bit ADC enable (OP_MODE_REG[2])
+    output logic        en_test_pattern_col,// Test pattern column enable (OP_MODE_REG[3])
+    output logic        en_test_pattern_row,// Test pattern row enable (OP_MODE_REG[4])
+    output logic        en_test_roic_col,   // Test ROIC column enable (OP_MODE_REG[5])
+    output logic        en_test_roic_row,   // Test ROIC row enable (OP_MODE_REG[6])
+    
+    // Switch Sync Output
+    output logic        exp_ack,            // Exposure acknowledge (inverted exp_req)
+    
+    // GATE Control Outputs
+    output logic        gate_mode1,         // GATE mode 1
+    output logic        gate_mode2,         // GATE mode 2
+    output logic        gate_cs1,           // GATE chip select 1
+    output logic        gate_cs2,           // GATE chip select 2
+    output logic        gate_sel,           // GATE select
+    output logic        gate_ud,            // GATE up/down
+    output logic        gate_stv_mode,      // GATE STV mode
+    output logic        gate_oepsn,         // GATE OE PSN
+    output logic        gate_lr1,           // GATE LR1
+    output logic        gate_lr2,           // GATE LR2
+    output logic        stv_sel_h,          // STV select high
+    output logic        stv_sel_l1,         // STV select L1
+    output logic        stv_sel_r1,         // STV select R1
+    output logic        stv_sel_l2,         // STV select L2
+    output logic        stv_sel_r2,         // STV select R2
+    output logic [15:0] gate_size,          // GATE size
+    output logic [15:0] gate_gpio_data,     // GATE GPIO data
+    
+    // AED Gate XAO Outputs
+    output logic [15:0] dn_aed_gate_xao_0,  // Down AED GATE XAO 0
+    output logic [15:0] dn_aed_gate_xao_1,  // Down AED GATE XAO 1
+    output logic [15:0] dn_aed_gate_xao_2,  // Down AED GATE XAO 2
+    output logic [15:0] dn_aed_gate_xao_3,  // Down AED GATE XAO 3
+    output logic [15:0] dn_aed_gate_xao_4,  // Down AED GATE XAO 4
+    output logic [15:0] dn_aed_gate_xao_5,  // Down AED GATE XAO 5
+    output logic [15:0] up_aed_gate_xao_0,  // Up AED GATE XAO 0
+    output logic [15:0] up_aed_gate_xao_1,  // Up AED GATE XAO 1
+    output logic [15:0] up_aed_gate_xao_2,  // Up AED GATE XAO 2
+    output logic [15:0] up_aed_gate_xao_3,  // Up AED GATE XAO 3
+    output logic [15:0] up_aed_gate_xao_4,  // Up AED GATE XAO 4
+    output logic [15:0] up_aed_gate_xao_5   // Up AED GATE XAO 5
 );
 
     //==========================================================================
@@ -216,6 +268,17 @@ module reg_map_refacto (
     // Back Bias Signals
     logic [15:0] reg_up_back_bias;              // Buffered up back bias
     logic [15:0] reg_dn_back_bias;              // Buffered down back bias
+    
+    // Image Command Signals
+    logic [15:0] reg_op_mode_reg;               // OP_MODE_REG register
+    logic        sig_get_bright;                // Internal get_bright signal
+    logic        soft_trigger;                  // Soft trigger signal
+    logic        sig_trigger;                   // Trigger signal
+    
+    // GATE Control Signals
+    logic [15:0] reg_set_gate;                  // GATE control register
+    logic [15:0] buf_gate_size;                 // Buffered GATE size
+    logic [15:0] reg_gate_size;                 // GATE size for CDC
 
     //=========================================================================="}
     // Register Memory Initialization (Simulation Only)
@@ -316,6 +379,71 @@ module reg_map_refacto (
     assign dn_back_bias = reg_dn_back_bias;
 
     //==========================================================================
+    // Image Command Signal Assignments
+    //==========================================================================
+    // Register bit extractions
+    assign sig_get_bright   = reg_sys_cmd_reg[2];   // Bit 2: get_bright trigger
+    assign soft_trigger     = reg_sys_cmd_reg[3];   // Bit 3: soft trigger
+    
+    // Image command outputs
+    assign get_dark         = reg_sys_cmd_reg[1];   // Bit 1: Direct output
+    assign dummy_get_image  = reg_sys_cmd_reg[8];   // Bit 8: Direct output
+    assign burst_get_image  = reg_op_mode_reg[8];   // Bit 8 of OP_MODE_REG
+    assign get_bright       = (sig_trigger & (~register_memory[`ADDR_AED_CMD][0])) | (sig_get_bright & register_memory[`ADDR_AED_CMD][0]);
+    assign cmd_get_bright   = sig_get_bright & soft_trigger;
+
+    //==========================================================================
+    // OP_MODE_REG Signal Assignments
+    //==========================================================================
+    assign en_panel_stable      = reg_op_mode_reg[1];   // Bit 1
+    assign en_16bit_adc         = reg_op_mode_reg[2];   // Bit 2
+    assign en_test_pattern_col  = reg_op_mode_reg[3];   // Bit 3
+    assign en_test_pattern_row  = reg_op_mode_reg[4];   // Bit 4
+    assign en_test_roic_col     = reg_op_mode_reg[5];   // Bit 5
+    assign en_test_roic_row     = reg_op_mode_reg[6];   // Bit 6
+
+    //==========================================================================
+    // Switch Sync Signal Assignment
+    //==========================================================================
+    assign exp_ack = ~exp_req;  // Simple inversion
+
+    //==========================================================================
+    // GATE Control Signal Assignments
+    //==========================================================================
+    assign gate_mode1       = reg_set_gate[0];
+    assign gate_mode2       = reg_set_gate[1];
+    assign gate_cs1         = reg_set_gate[2];
+    assign gate_cs2         = reg_set_gate[3];
+    assign gate_sel         = reg_set_gate[4];
+    assign gate_ud          = reg_set_gate[5];
+    assign gate_stv_mode    = reg_set_gate[6];
+    assign gate_oepsn       = reg_set_gate[7];
+    assign gate_lr1         = reg_set_gate[8];
+    assign gate_lr2         = reg_set_gate[9];
+    assign stv_sel_h        = reg_set_gate[11];
+    assign stv_sel_l1       = reg_set_gate[12];
+    assign stv_sel_r1       = reg_set_gate[13];
+    assign stv_sel_l2       = reg_set_gate[14];
+    assign stv_sel_r2       = reg_set_gate[15];
+    assign gate_gpio_data   = register_memory[`ADDR_GATE_GPIO_REG];
+
+    //==========================================================================
+    // AED Gate XAO Signal Assignments (eim_clk domain)
+    //==========================================================================
+    assign dn_aed_gate_xao_0 = register_memory[`ADDR_DN_AED_GATE_XAO_0];
+    assign dn_aed_gate_xao_1 = register_memory[`ADDR_DN_AED_GATE_XAO_1];
+    assign dn_aed_gate_xao_2 = register_memory[`ADDR_DN_AED_GATE_XAO_2];
+    assign dn_aed_gate_xao_3 = register_memory[`ADDR_DN_AED_GATE_XAO_3];
+    assign dn_aed_gate_xao_4 = register_memory[`ADDR_DN_AED_GATE_XAO_4];
+    assign dn_aed_gate_xao_5 = register_memory[`ADDR_DN_AED_GATE_XAO_5];
+    assign up_aed_gate_xao_0 = register_memory[`ADDR_UP_AED_GATE_XAO_0];
+    assign up_aed_gate_xao_1 = register_memory[`ADDR_UP_AED_GATE_XAO_1];
+    assign up_aed_gate_xao_2 = register_memory[`ADDR_UP_AED_GATE_XAO_2];
+    assign up_aed_gate_xao_3 = register_memory[`ADDR_UP_AED_GATE_XAO_3];
+    assign up_aed_gate_xao_4 = register_memory[`ADDR_UP_AED_GATE_XAO_4];
+    assign up_aed_gate_xao_5 = register_memory[`ADDR_UP_AED_GATE_XAO_5];
+
+    //==========================================================================
     // FSM State Register Update (on fsm_clk domain)
     //==========================================================================
     always @(posedge fsm_clk or negedge rst) begin
@@ -363,6 +491,32 @@ module reg_map_refacto (
                 reset_fsm <= 1'b0;
             else if (hi_reset_fsm)
                 reset_fsm <= 1'b1;
+        end
+    end
+
+    //==========================================================================
+    // OP_MODE_REG CDC (eim_clk -> fsm_clk)
+    //==========================================================================
+    always @(posedge fsm_clk or negedge rst) begin
+        if (!rst) begin
+            reg_op_mode_reg <= `DEF_OP_MODE_REG;
+        end else begin
+            if (fsm_rst_index)
+                reg_op_mode_reg <= register_memory[`ADDR_OP_MODE_REG];
+        end
+    end
+
+    //==========================================================================
+    // Trigger Logic (on fsm_clk domain)
+    //==========================================================================
+    always @(posedge fsm_clk or negedge rst) begin
+        if (!rst) begin
+            sig_trigger <= 1'b0;
+        end else begin
+            if (!sig_get_bright)
+                sig_trigger <= 1'b0;
+            else if (sig_get_bright)  // Simplified: set when get_bright active
+                sig_trigger <= 1'b1;
         end
     end
 
@@ -529,6 +683,48 @@ module reg_map_refacto (
             reg_dn_back_bias <= register_memory[16'h0021];
         end
     end
+
+    //==========================================================================
+    // GATE Control Register Buffering (eim_clk → fsm_clk)
+    //==========================================================================
+    wire [15:0] sig_reg_addr = eim_bus.reg_addr[15:0];
+    wire up_set_gate = (sig_reg_addr == `ADDR_SET_GATE);
+    wire up_gate_size = (sig_reg_addr == `ADDR_GATE_SIZE);
+
+    reg [15:0] buf_set_gate;
+    always @(posedge eim_clk or negedge eim_rst) begin
+        if (!eim_rst)
+            buf_set_gate <= `DEF_SET_GATE;
+        else if (up_set_gate && reg_data_index)
+            buf_set_gate <= reg_data;
+    end
+
+    always @(posedge eim_clk or negedge eim_rst) begin
+        if (!eim_rst)
+            buf_gate_size <= `DEF_GATE_SIZE;
+        else if (up_gate_size && reg_data_index)
+            buf_gate_size <= reg_data;
+    end
+
+    always @(posedge fsm_clk or negedge rst) begin
+        if (!rst) begin
+            reg_set_gate <= `DEF_SET_GATE;
+        end else begin
+            if (fsm_rst_index)
+                reg_set_gate <= buf_set_gate;
+        end
+    end
+
+    always @(posedge fsm_clk or negedge rst) begin
+        if (!rst) begin
+            reg_gate_size <= `DEF_GATE_SIZE;
+        end else begin
+            if (fsm_rst_index)
+                reg_gate_size <= buf_gate_size;
+        end
+    end
+
+    assign gate_size = reg_gate_size;
 
     //==========================================================================
     // Sequence LUT Write Pulse Detection
@@ -850,72 +1046,54 @@ module reg_map_refacto (
     assign s_fpga_ver_data = fpga_ver_data;
 
     //==========================================================================
-    // TODO: Remaining Implementation (124 outputs, Dec 7, 2025)
+    // TODO: Remaining Implementation (Dec 11, 2025)
     //==========================================================================
-    // Completed: 31/155 (20%) | Remaining: 124 outputs
+    // Completed: 43/155 (28%) | Remaining: 112 outputs
     //==========================================================================
     
-    // ========== TODO 1: System Control (41 outputs) ==========
+    // ========== TODO 1: System Control (22 outputs remaining) ==========
     //
-    // 1.1 Image Commands (5) - 0x0006~0x000D
-    //     [ ] get_dark, get_bright, cmd_get_bright, dummy_get_image, burst_get_image
-    // 1.2 System Enables (13) - 0x0005, 0x000B, 0x0012, 0x007E
-    //     [ ] en_pwr_dwn, en_pwr_off, en_panel_stable, en_aed
+    // 1.1 System Enables (7) - 0x0005, 0x00B9
+    //     [ ] en_pwr_dwn, en_pwr_off, en_aed, aed_test_mode1/2
     //     [ ] en_back_bias, en_flush (zero check on 0x0010~0x0011)
-    //     [ ] en_16bit_adc, en_test_pattern_col/row, en_test_roic_col/row
-    //     [ ] aed_test_mode1/2
-    // 1.3 GATE Control (17) - 0x0003~0x0004, 0x0099
+    // 1.2 GATE Control (17) - 0x0003~0x0004, 0x0082
     //     [ ] gate_mode1/2, gate_cs1/2, gate_sel, gate_ud, gate_stv_mode, gate_oepsn
     //     [ ] gate_lr1/2, stv_sel_h, stv_sel_l1/r1/l2/r2
     //     [ ] gate_size, gate_gpio_data
-    // 1.4 AED Threshold (6) - 0x0013~0x001A
+    // 1.3 AED Threshold (6) - 0x0013~0x001A
     //     [ ] aed_th, nega_aed_th, posi_aed_th, sel_aed_roic, sel_aed_test_roic
     //     [ ] num_trigger (decrement), ready_aed_read (0→1), aed_dark_delay (0→1, dec)
-    // 1.5 AED Gate XAO (12) - 0x0040~0x004B
+    // 1.4 AED Gate XAO (12) - 0x0040~0x004B
     //     [ ] dn_aed_gate_xao_0~5, up_aed_gate_xao_0~5
-    // 1.6 Switch Sync (3) - 0x00EA~0x00EB, exp_ack
-    //     [ ] up_switch_sync, dn_switch_sync, exp_ack (needs exp_req input)
+    // 1.5 Switch Sync (2) - 0x00EA~0x00EB
+    //     [ ] up_switch_sync, dn_switch_sync
+    //     [✓] exp_ack (inverted exp_req)
     
-    // ========== TODO 2: Timing & CSI2 (7 outputs) ==========
-    // 2.1 CSI2 ✅ (3) - 0x0075~0x0077
-    //     [✓] max_v_count, max_h_count, csi2_word_count
-    // 2.2 Timing Control (4) - FSM-dependent mux logic
+    // ========== TODO 2: Timing Control (6 outputs) ==========
+    //
+    // 2.1 Timing Control (4) - FSM-dependent mux logic
     //     [ ] cycle_width[23:0] - FSM state mux (needs readout_width input)
     //     [ ] mux_image_height, dsp_image_height (CDC), frame_rpt
-    // 2.3 Direct Timing (2) - 0x0006, 0x0018
+    // 2.2 Direct Timing (2) - 0x0006, 0x0018
     //     [ ] readout_count, saturation_flush_repeat
     
-    // ========== TODO 3: TI ROIC (40 outputs) ==========
-    // 3.1 TI ROIC Basic ✅ (5) - 0x0100~0x0124
-    //     [✓] ti_roic_sync, ti_roic_tp_sel, ti_roic_str, ti_roic_reg_addr, ti_roic_reg_data
-    // 3.2 TI ROIC Deserializer ✅ (7+2) - 0x0130~0x015B
-    //     [✓] 7 control outputs + 2 status inputs (TEST 17 verified)
-    // 3.3 ROIC Burst & Timing (3) - 0x0090~0x0092
+    // ========== TODO 3: TI ROIC (5 outputs) ==========
+    //
+    // 3.1 ROIC Burst & Timing (3) - 0x0090~0x0092
     //     [ ] roic_burst_cycle, start_roic_burst_clk, end_roic_burst_clk
-    // 3.4 Back Bias ✅ (2) - 0x0020~0x0021
-    //     [✓] up_back_bias, dn_back_bias (TEST 19 verified)
-    // 3.5 IO Delay (2) - 0x00DC
+    // 3.2 IO Delay (2) - 0x00DC
     //     [ ] ld_io_delay_tab (pulse), io_delay_tab[4:0]
     
-    // ========== TODO 4: Sequence LUT (8 outputs) ==========
-    // 4.1 LUT Interface ✅ (5) - 0x00E0~0x00E7
-    //     [✓] seq_lut_addr, seq_lut_data, seq_lut_wr_en, seq_lut_control, seq_lut_config_done
-    // 4.2 Acquisition ✅ (2) - 0x0200~0x0203
-    //     [✓] acq_mode, acq_expose_size (TEST 16 verified)
-    // 4.3 LUT Inputs ✅ (1) - seq_lut_read_data
-    //     [✓] Already connected
+    // ========== TODO 4: New Inputs (1) ==========
     
-    // ========== TODO 5: New Inputs (2) ==========
-    // 5.1 TI ROIC Inputs ✅ - ti_roic_deser_align_shift, ti_roic_deser_align_done
-    //     [✓] Connected (Lines 81-82)
-    // 5.2 Timing Inputs (2)
-    //     [ ] exp_req (for num_trigger, exp_ack)
+    // 4.1 Timing Inputs (1)
     //     [ ] readout_width[23:0] (for cycle_width)
+    //     [✓] exp_req (added for exp_ack)
     
-    // ========== TODO 6: Architecture ==========
-    // 6.1 CDC (~30 signals) - eim_clk → fsm_clk
-    // 6.2 Pulse Generation - ld_io_delay_tab, exp_ack
-    // 6.3 Value Logic - ready_aed_read (0→1), aed_dark_delay (0→1,dec), num_trigger (dec), frame_rpt (N-1)
+    // ========== TODO 5: Architecture ==========
+    // 5.1 CDC (~30 signals) - eim_clk → fsm_clk
+    // 5.2 Pulse Generation - ld_io_delay_tab
+    // 5.3 Value Logic - ready_aed_read (0→1), aed_dark_delay (0→1,dec), num_trigger (dec), frame_rpt (N-1)
     //==========================================================================
 
 endmodule
