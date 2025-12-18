@@ -148,14 +148,15 @@ module reg_map_refacto (
     output logic [15:0] dn_aed_gate_xao_0,
     output logic [15:0] dn_aed_gate_xao_1,
     output logic [15:0] dn_aed_gate_xao_2,
-    output logic [15:0] dn_aed_gate_xao_3,  // Down AED GATE XAO 3
-    output logic [15:0] dn_aed_gate_xao_4,  // Down AED GATE XAO 4
-    output logic [15:0] dn_aed_gate_xao_5,  // Down AED GATE XAO 5
-    output logic [15:0] up_aed_gate_xao_0,  // Up AED GATE XAO 0
-    output logic [15:0] up_aed_gate_xao_1,  // Up AED GATE XAO 1
-    output logic [15:0] up_aed_gate_xao_2,  // Up AED GATE XAO 2
-    output logic [15:0] up_aed_gate_xao_3,  // Up AED GATE XAO 3
-    output logic [15:0] up_aed_gate_xao_4,  // Up AED GATE XAO 4
+    output logic [15:0] dn_aed_gate_xao_3,
+    output logic [15:0] dn_aed_gate_xao_4,
+    output logic [15:0] dn_aed_gate_xao_5,
+    output logic [15:0] up_aed_gate_xao_0,
+    output logic [15:0] up_aed_gate_xao_1,
+    output logic [15:0] up_aed_gate_xao_2,
+    output logic [15:0] up_aed_gate_xao_3,
+    output logic [15:0] up_aed_gate_xao_4,
+    output logic [15:0] up_aed_gate_xao_5
 );
 
     //==========================================================================
