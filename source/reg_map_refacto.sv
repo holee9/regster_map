@@ -81,7 +81,7 @@ module reg_map_refacto (
     input  wire [63:0]  seq_lut_read_data,  // Sequence LUT read-back data
     
     // TI ROIC Deserializer Inputs
-    input  wire [11:0][4:0] ti_roic_deser_align_shift, // Alignment shift values [0-11]
+    input  wire [4:0] ti_roic_deser_align_shift[11:0], // Alignment shift values [0-11]
     input  wire [11:0]  ti_roic_deser_align_done,      // Alignment done status [0-11]
 
     //==========================================================================
@@ -687,7 +687,7 @@ module reg_map_refacto (
     //==========================================================================
     // GATE Control Register Buffering (eim_clk → fsm_clk)
     //==========================================================================
-    wire [15:0] sig_reg_addr = eim_bus.reg_addr[15:0];
+    wire [15:0] sig_reg_addr = reg_addr[15:0];
     wire up_set_gate = (sig_reg_addr == `ADDR_SET_GATE);
     wire up_gate_size = (sig_reg_addr == `ADDR_GATE_SIZE);
 
