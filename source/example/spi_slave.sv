@@ -1,4 +1,4 @@
-`include	"./p_define.sv"
+//`include	"./p_define.sv"
 `timescale 1ns / 1ps
 
 module spi_slave

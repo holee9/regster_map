@@ -1,37 +1,10 @@
 //==============================================================================
-// Project     : BLUE Platform - X-ray Detector System
-// Module      : reg_map_refacto.sv
-// Description : Register Map Module with Optimized Architecture
-//
-// Copyright (c) 2024-2025 H&abyz Inc.
-// All rights reserved.
-//
-// Author      : drake.lee (holee9@gmail.com)
-// Company     : H&abyz Inc.
-// Created     : 2022-02-11
-// Modified    : 2025-12-05
-//
+// reg_map_refacto.sv - Simplified Register Map Module
 //==============================================================================
-// Version History
-//==============================================================================
-// Version | Date       | Author     | Description
-//---------|------------|------------|--------------------------------------------
-// 0.0     | 2022-02-11 | drake.lee  | Initial release
-// 0.1     | 2024-04-15 | drake.lee  | CSI2 interface test adaptation
-// 0.2     | 2025-12-05 | drake.lee  | Refactored with optimized structure
-//         |            |            | - Unified register memory architecture
-//         |            |            | - Simplified read/write logic
-//         |            |            | - Integrated with p_define_refacto.sv
-//         |            |            | - EIM Clock: 100 MHz, FSM Clock: 20 MHz
-//==============================================================================
-// Features
-//==============================================================================
-// - Centralized register memory array (512 addresses)
-// - Unified read/write access logic
-// - Special register handling (Read-Only, calculated values)
-// - Direct memory access for standard R/W registers
-// - Case-based override for special registers
-//
+// BRAM-based register architecture for P&R optimization
+// - 512x16 register_memory array using Block RAM
+// - Separate write (eim_clk) and read buffer (eim_clk/fsm_clk) logic
+// - Simple default case for most registers, special handling for RO/calculated
 //==============================================================================
 
 `include "./p_define_refacto.sv"
@@ -39,146 +12,142 @@
 
 module reg_map_refacto (
     //==========================================================================
-    // Clock and Reset Inputs
+    // Clocks & Resets
     //==========================================================================
-    input  wire         eim_clk,            // 100MHz clock for EIM interface
-    input  wire         eim_rst,            // EIM interface reset
-    input  wire         fsm_clk,            // 20MHz clock for FSM
-    input  wire         rst,                // System reset
+    input  wire         eim_clk,            // 100MHz - Register interface
+    input  wire         eim_rst,
+    input  wire         fsm_clk,            // 20MHz - FSM domain
+    input  wire         rst,
 
     //==========================================================================
     // FSM State Inputs
     //==========================================================================
-    input  wire         fsm_rst_index,      // FSM in RESET state
-    input  wire         fsm_init_index,     // FSM in INIT state
-    input  wire         fsm_back_bias_index,// FSM in BACK_BIAS state
-    input  wire         fsm_flush_index,    // FSM in FLUSH state
-    input  wire         fsm_aed_read_index, // FSM in AED_READ state
-    input  wire         fsm_exp_index,      // FSM in EXPOSURE state
-    input  wire         fsm_read_index,     // FSM in READ state
-    input  wire         fsm_idle_index,     // FSM in IDLE state
+    input  wire         fsm_rst_index,
+    input  wire         fsm_init_index,
+    input  wire         fsm_back_bias_index,
+    input  wire         fsm_flush_index,
+    input  wire         fsm_aed_read_index,
+    input  wire         fsm_exp_index,
+    input  wire         fsm_read_index,
+    input  wire         fsm_idle_index,
 
     //==========================================================================
     // System Status Inputs
     //==========================================================================
-    input  wire         ready_to_get_image, // Ready to capture image
-    input  wire         aed_ready_done,     // AED ready done flag
-    input  wire         panel_stable_exist, // Panel stable flag
-    input  wire         exp_read_exist,     // Exposure/Read exist flag
-    input  wire         exp_req,            // Exposure request
+    input  wire         ready_to_get_image,
+    input  wire         aed_ready_done,
+    input  wire         panel_stable_exist,
+    input  wire         exp_read_exist,
+    input  wire         exp_req,
 
     //==========================================================================
     // Register Access Interface
     //==========================================================================
-    input  wire         reg_read_index,     // Register read enable
-    input  wire [15:0]  reg_addr,           // Register address
-    input  wire [15:0]  reg_data,           // Register write data
-    input  wire         reg_data_index,     // Register data strobe for write
+    input  wire         reg_read_index,     // Read enable
+    input  wire [15:0]  reg_addr,
+    input  wire [15:0]  reg_data,
+    input  wire         reg_data_index,     // Write strobe
 
     //==========================================================================
-    // Sequence LUT Interface
+    // External Interfaces
     //==========================================================================
-    input  wire [63:0]  seq_lut_read_data,  // Sequence LUT read-back data
-    
-    // TI ROIC Deserializer Inputs
-    input  wire [4:0] ti_roic_deser_align_shift[11:0], // Alignment shift values [0-11]
-    input  wire [11:0]  ti_roic_deser_align_done,      // Alignment done status [0-11]
+    input  wire [63:0]  seq_lut_read_data,
+    input  wire [4:0]   ti_roic_deser_align_shift[11:0],
+    input  wire [11:0]  ti_roic_deser_align_done,
 
     //==========================================================================
     // Register Read Outputs
     //==========================================================================
-    output logic [15:0] reg_read_out,       // Register read data output
-    output logic        read_data_en,       // Register read data enable
+    output logic [15:0] reg_read_out,
+    output logic        read_data_en,
 
     //==========================================================================
     // System Control Outputs
     //==========================================================================
-    output logic [7:0]  state_led_ctr,      // LED control output
-    output logic        reg_map_sel,        // Register map select
+    output logic [7:0]  state_led_ctr,
+    output logic        reg_map_sel,
+    output logic        system_rst,
+    output logic        org_reset_fsm,
+    output logic        reset_fsm,
     
-    // System Control & Reset Outputs
-    output logic        system_rst,         // Global system reset
-    output logic        org_reset_fsm,      // Original FSM reset signal
-    output logic        reset_fsm,          // Edge-detected FSM reset
+    // CSI2
+    output logic [15:0] max_v_count,
+    output logic [15:0] max_h_count,
+    output logic [15:0] csi2_word_count,
     
-    // CSI2 Interface Outputs
-    output logic [15:0] max_v_count,        // Maximum vertical count
-    output logic [15:0] max_h_count,        // Maximum horizontal count
-    output logic [15:0] csi2_word_count,    // CSI2 word count
+    // TI ROIC Basic
+    output logic        ti_roic_sync,
+    output logic        ti_roic_tp_sel,
+    output logic [1:0]  ti_roic_str,
+    output logic [15:0] ti_roic_reg_addr,
+    output logic [15:0] ti_roic_reg_data,
     
-    // TI ROIC Basic Control Outputs
-    output logic        ti_roic_sync,       // TI ROIC sync signal
-    output logic        ti_roic_tp_sel,     // TI ROIC test pattern select
-    output logic [1:0]  ti_roic_str,        // TI ROIC strength control
-    output logic [15:0] ti_roic_reg_addr,   // TI ROIC register address
-    output logic [15:0] ti_roic_reg_data,   // TI ROIC register data
+    // TI ROIC Deserializer
+    output logic        ti_roic_deser_reset,
+    output logic        ti_roic_deser_dly_tap_ld,
+    output logic [4:0]  ti_roic_deser_dly_tap_in,
+    output logic        ti_roic_deser_dly_data_ce,
+    output logic        ti_roic_deser_dly_data_inc,
+    output logic        ti_roic_deser_align_mode,
+    output logic        ti_roic_deser_align_start,
+    output logic [11:0][4:0] ti_roic_deser_shift_set,
     
-    // TI ROIC Deserializer Control Outputs
-    output logic        ti_roic_deser_reset,            // TI ROIC deserializer reset
-    output logic        ti_roic_deser_dly_tap_ld,       // TI ROIC deserializer delay tap load
-    output logic [4:0]  ti_roic_deser_dly_tap_in,       // TI ROIC deserializer delay tap input
-    output logic        ti_roic_deser_dly_data_ce,      // TI ROIC deserializer delay data clock enable
-    output logic        ti_roic_deser_dly_data_inc,     // TI ROIC deserializer delay data increment
-    output logic        ti_roic_deser_align_mode,       // TI ROIC deserializer align mode
-    output logic        ti_roic_deser_align_start,      // TI ROIC deserializer align start
-    output logic [11:0][4:0] ti_roic_deser_shift_set,   // TI ROIC deserializer shift settings [0-11]
+    // Back Bias
+    output logic [15:0] up_back_bias,
+    output logic [15:0] dn_back_bias,
     
-    // Back Bias Control Outputs
-    output logic [15:0] up_back_bias,           // Up back bias (mode-dependent: 0x0020/0x0022)
-    output logic [15:0] dn_back_bias,           // Down back bias (mode-dependent: 0x0021/0x0023)
+    // Sequence LUT
+    output logic [7:0]  seq_lut_addr,
+    output logic [63:0] seq_lut_data,
+    output logic        seq_lut_wr_en,
+    output logic [15:0] seq_lut_control,
+    output logic        seq_lut_config_done,
     
-    // Sequence LUT Interface Outputs
-    output logic [7:0]  seq_lut_addr,       // Sequence LUT address
-    output logic [63:0] seq_lut_data,       // Sequence LUT data (4x16-bit combined)
-    output logic        seq_lut_wr_en,      // Sequence LUT write enable
-    output logic [15:0] seq_lut_control,    // Sequence LUT control register
-    output logic        seq_lut_config_done,// Sequence LUT configuration done
+    // Acquisition
+    output logic [2:0]  acq_mode,
+    output logic [31:0] acq_expose_size,
     
-    // Acquisition Mode Outputs
-    output logic [2:0]  acq_mode,           // Acquisition mode
-    output logic [31:0] acq_expose_size,    // Acquisition exposure size (extended to 32-bit)
-    
-    // Image Command Outputs
-    output logic        get_dark,           // Get dark image command
-    output logic        get_bright,         // Get bright image command
-    output logic        cmd_get_bright,     // Command get bright
-    output logic        dummy_get_image,    // Dummy get image
-    output logic        burst_get_image,    // Burst get image
+    // Image Commands
+    output logic        get_dark,
+    output logic        get_bright,
+    output logic        cmd_get_bright,
+    output logic        dummy_get_image,
+    output logic        burst_get_image,
 
-    // OP_MODE_REG Outputs
-    output logic        en_panel_stable,    // Panel stable enable (OP_MODE_REG[1])
-    output logic        en_16bit_adc,       // 16-bit ADC enable (OP_MODE_REG[2])
-    output logic        en_test_pattern_col,// Test pattern column enable (OP_MODE_REG[3])
-    output logic        en_test_pattern_row,// Test pattern row enable (OP_MODE_REG[4])
-    output logic        en_test_roic_col,   // Test ROIC column enable (OP_MODE_REG[5])
-    output logic        en_test_roic_row,   // Test ROIC row enable (OP_MODE_REG[6])
+    // OP_MODE_REG Bits
+    output logic        en_panel_stable,
+    output logic        en_16bit_adc,
+    output logic        en_test_pattern_col,
+    output logic        en_test_pattern_row,
+    output logic        en_test_roic_col,
+    output logic        en_test_roic_row,
     
-    // Switch Sync Output
-    output logic        exp_ack,            // Exposure acknowledge (inverted exp_req)
+    // Exposure Ack
+    output logic        exp_ack,
     
-    // GATE Control Outputs
-    output logic        gate_mode1,         // GATE mode 1
-    output logic        gate_mode2,         // GATE mode 2
-    output logic        gate_cs1,           // GATE chip select 1
-    output logic        gate_cs2,           // GATE chip select 2
-    output logic        gate_sel,           // GATE select
-    output logic        gate_ud,            // GATE up/down
-    output logic        gate_stv_mode,      // GATE STV mode
-    output logic        gate_oepsn,         // GATE OE PSN
-    output logic        gate_lr1,           // GATE LR1
-    output logic        gate_lr2,           // GATE LR2
-    output logic        stv_sel_h,          // STV select high
-    output logic        stv_sel_l1,         // STV select L1
-    output logic        stv_sel_r1,         // STV select R1
-    output logic        stv_sel_l2,         // STV select L2
-    output logic        stv_sel_r2,         // STV select R2
-    output logic [15:0] gate_size,          // GATE size
-    output logic [15:0] gate_gpio_data,     // GATE GPIO data
+    // GATE Control
+    output logic        gate_mode1,
+    output logic        gate_mode2,
+    output logic        gate_cs1,
+    output logic        gate_cs2,
+    output logic        gate_sel,
+    output logic        gate_ud,
+    output logic        gate_stv_mode,
+    output logic        gate_oepsn,
+    output logic        gate_lr1,
+    output logic        gate_lr2,
+    output logic        stv_sel_h,
+    output logic        stv_sel_l1,
+    output logic        stv_sel_r1,
+    output logic        stv_sel_l2,
+    output logic        stv_sel_r2,
+    output logic [15:0] gate_size,
+    output logic [15:0] gate_gpio_data,
     
-    // AED Gate XAO Outputs
-    output logic [15:0] dn_aed_gate_xao_0,  // Down AED GATE XAO 0
-    output logic [15:0] dn_aed_gate_xao_1,  // Down AED GATE XAO 1
-    output logic [15:0] dn_aed_gate_xao_2,  // Down AED GATE XAO 2
+    // AED Gate XAO
+    output logic [15:0] dn_aed_gate_xao_0,
+    output logic [15:0] dn_aed_gate_xao_1,
+    output logic [15:0] dn_aed_gate_xao_2,
     output logic [15:0] dn_aed_gate_xao_3,  // Down AED GATE XAO 3
     output logic [15:0] dn_aed_gate_xao_4,  // Down AED GATE XAO 4
     output logic [15:0] dn_aed_gate_xao_5,  // Down AED GATE XAO 5
@@ -187,178 +156,124 @@ module reg_map_refacto (
     output logic [15:0] up_aed_gate_xao_2,  // Up AED GATE XAO 2
     output logic [15:0] up_aed_gate_xao_3,  // Up AED GATE XAO 3
     output logic [15:0] up_aed_gate_xao_4,  // Up AED GATE XAO 4
-    output logic [15:0] up_aed_gate_xao_5   // Up AED GATE XAO 5
 );
 
     //==========================================================================
     // Internal Signals
     //==========================================================================
     
-    // Register Memory Array with BRAM Optimization
-    // Using Block RAM instead of distributed RAM for efficient resource usage
-    // - Saves ~8,000 FFs (replaces with 1 BRAM36)
-    // - Adds 1 clock cycle latency for read operations
-    // - Optimal for large register arrays (512x16 = 8Kbit)
+    // BRAM Register Memory (saves ~8K FFs, uses 1 BRAM36)
     (* ram_style = "block" *) logic [15:0] register_memory [0:`MAX_ADDR-1];
     
-    // Address Management
     logic [15:0] current_reg_addr;
-    
-    // Read Data Path
     logic [15:0] s_reg_read_out_tmp0;
-    logic [15:0] s_reg_read_out_latched;  // Latched read data
+    logic [15:0] s_reg_map_sel, s_state_led_ctr;
     
-    // Output Assignments
-    logic [15:0] s_reg_map_sel;
-    logic [15:0] s_state_led_ctr;
+    // FPGA Version
+    logic [31:0] fpga_ver_data, s_fpga_ver_data;
+    wire         CFGCLK, DATAVALID;
     
-    // FPGA Version from Configuration Memory
-    logic [31:0] fpga_ver_data;
-    logic [31:0] s_fpga_ver_data;
-    wire         CFGCLK;
-    wire         DATAVALID;
-    
-    // FSM State Register
+    // FSM State
     logic [7:0]  fsm_reg;
     
-    // System Control & Reset Signals
-    logic [15:0] reg_sys_cmd_reg;           // SYS_CMD_REG register
-    logic        sig_reset_fsm_1d;          // Delayed reset_fsm for edge detection
-    logic        hi_reset_fsm;              // Rising edge detection
-    logic        lo_reset_fsm;              // Falling edge detection
+    // System Control
+    logic [15:0] reg_sys_cmd_reg;
+    logic        sig_reset_fsm_1d, hi_reset_fsm, lo_reset_fsm;
     
-    // CSI2 Interface Signals
-    logic [15:0] reg_max_v_count;           // Buffered max_v_count
-    logic [15:0] reg_max_h_count;           // Buffered max_h_count
-    logic [15:0] reg_csi2_word_count;       // Buffered csi2_word_count
+    // CSI2
+    logic [15:0] reg_max_v_count, reg_max_h_count, reg_csi2_word_count;
     
-    // TI ROIC Basic Control Signals
-    logic [15:0] reg_ti_roic_sync;          // Buffered TI ROIC sync
-    logic [15:0] reg_ti_roic_tp_sel;        // Buffered TI ROIC test pattern select
-    logic [15:0] reg_ti_roic_str;           // Buffered TI ROIC strength
-    logic [15:0] reg_ti_roic_reg_addr;      // Buffered TI ROIC register address
-    logic [15:0] reg_ti_roic_reg_data;      // Buffered TI ROIC register data
+    // TI ROIC
+    logic [15:0] reg_ti_roic_sync, reg_ti_roic_tp_sel, reg_ti_roic_str;
+    logic [15:0] reg_ti_roic_reg_addr, reg_ti_roic_reg_data;
+    logic [15:0] reg_ti_roic_deser_reset, reg_ti_roic_deser_dly_tap_ld;
+    logic [15:0] reg_ti_roic_deser_dly_tap_in, reg_ti_roic_deser_dly_data_ce;
+    logic [15:0] reg_ti_roic_deser_dly_data_inc, reg_ti_roic_deser_align_mode;
+    logic [15:0] reg_ti_roic_deser_align_start;
+    logic [15:0] reg_ti_roic_deser_shift_set[11:0];
+    logic [15:0] reg_ti_roic_deser_align_shift[11:0];
+    logic [15:0] reg_ti_roic_deser_align_done;
     
-    // Sequence LUT Interface Signals
-    logic [7:0]  reg_seq_lut_addr;          // Buffered sequence LUT address
-    logic [15:0] reg_seq_lut_data_0;        // Sequence LUT data part 0
-    logic [15:0] reg_seq_lut_data_1;        // Sequence LUT data part 1
-    logic [15:0] reg_seq_lut_data_2;        // Sequence LUT data part 2
-    logic [15:0] reg_seq_lut_data_3;        // Sequence LUT data part 3
-    logic [15:0] reg_seq_lut_control;       // Buffered sequence LUT control
-    logic        seq_lut_data_wr_pulse;     // Write pulse detection for DATA_0~3
-    logic [15:0] prev_reg_addr;             // Previous register address for write detection
+    // Sequence LUT
+    logic [7:0]  reg_seq_lut_addr;
+    logic [15:0] reg_seq_lut_data_0, reg_seq_lut_data_1;
+    logic [15:0] reg_seq_lut_data_2, reg_seq_lut_data_3;
+    logic [15:0] reg_seq_lut_control;
+    logic        seq_lut_data_wr_pulse;
     
-    // Acquisition Mode Signals
-    logic [2:0]  reg_acq_mode;              // Buffered acquisition mode
-    logic [15:0] reg_expose_size;           // Buffered expose size
+    // Acquisition
+    logic [2:0]  reg_acq_mode;
+    logic [15:0] reg_expose_size;
     
-    // TI ROIC Deserializer Control Signals
-    logic [15:0] reg_ti_roic_deser_reset;       // Buffered deserializer reset
-    logic [15:0] reg_ti_roic_deser_dly_tap_ld;  // Buffered delay tap load
-    logic [15:0] reg_ti_roic_deser_dly_tap_in;  // Buffered delay tap input
-    logic [15:0] reg_ti_roic_deser_dly_data_ce; // Buffered delay data clock enable
-    logic [15:0] reg_ti_roic_deser_dly_data_inc;// Buffered delay data increment
-    logic [15:0] reg_ti_roic_deser_align_mode;  // Buffered align mode
-    logic [15:0] reg_ti_roic_deser_align_start; // Buffered align start
-    logic [15:0] reg_ti_roic_deser_shift_set[11:0]; // Buffered shift settings [0-11]
-    logic [15:0] reg_ti_roic_deser_align_shift[11:0]; // Buffered align shift inputs [0-11]
-    logic [15:0] reg_ti_roic_deser_align_done;  // Buffered align done inputs
+    // Back Bias
+    logic [15:0] reg_up_back_bias, reg_dn_back_bias;
     
-    // Back Bias Signals
-    logic [15:0] reg_up_back_bias;              // Buffered up back bias
-    logic [15:0] reg_dn_back_bias;              // Buffered down back bias
+    // Image Command
+    logic [15:0] reg_op_mode_reg;
+    logic        sig_get_bright, soft_trigger, sig_trigger;
     
-    // Image Command Signals
-    logic [15:0] reg_op_mode_reg;               // OP_MODE_REG register
-    logic        sig_get_bright;                // Internal get_bright signal
-    logic        soft_trigger;                  // Soft trigger signal
-    logic        sig_trigger;                   // Trigger signal
-    
-    // GATE Control Signals
-    logic [15:0] reg_set_gate;                  // GATE control register
-    logic [15:0] buf_gate_size;                 // Buffered GATE size
-    logic [15:0] reg_gate_size;                 // GATE size for CDC
+    // GATE Control
+    logic [15:0] reg_set_gate, reg_gate_size;
 
-    //=========================================================================="}
-    // Register Memory Initialization (Simulation Only)
+    //==========================================================================
+    // Register Memory Initialization
     //==========================================================================
     `ifndef SYNTHESIS
     initial begin
         integer i;
-        for (i = 0; i < `MAX_ADDR; i = i + 1) begin
-            register_memory[i] = 16'd0;
-        end
+        for (i = 0; i < `MAX_ADDR; i = i + 1) register_memory[i] = 16'd0;
     end
     `endif
 
     //==========================================================================
-    // Address Decode
-    //==========================================================================
-    assign current_reg_addr = reg_addr[15:0];
-
-    //==========================================================================
     // Output Assignments
     //==========================================================================
-    assign reg_read_out     = s_reg_read_out_tmp0;  // Direct output, no tri-state
+    assign current_reg_addr = reg_addr[15:0];
+    assign reg_read_out     = s_reg_read_out_tmp0;
     assign s_reg_map_sel    = register_memory[`ADDR_REG_MAP_SEL];
     assign reg_map_sel      = s_reg_map_sel[0];
     assign s_state_led_ctr  = register_memory[`ADDR_STATE_LED_CTR];
     assign state_led_ctr    = s_state_led_ctr[7:0];
 
-    //==========================================================================
-    // System Control & Reset Signal Assignments
-    //==========================================================================
+    // System Control
     assign reg_sys_cmd_reg  = register_memory[`ADDR_SYS_CMD_REG];
-    assign system_rst       = reg_sys_cmd_reg[4];   // Bit 4: Global system reset
-    assign org_reset_fsm    = reg_sys_cmd_reg[0];   // Bit 0: Original FSM reset
-    assign hi_reset_fsm     = org_reset_fsm && (~sig_reset_fsm_1d);  // Rising edge
-    assign lo_reset_fsm     = (~org_reset_fsm) && sig_reset_fsm_1d;  // Falling edge
+    assign system_rst       = reg_sys_cmd_reg[4];
+    assign org_reset_fsm    = reg_sys_cmd_reg[0];
+    assign hi_reset_fsm     = org_reset_fsm && (~sig_reset_fsm_1d);
+    assign lo_reset_fsm     = (~org_reset_fsm) && sig_reset_fsm_1d;
 
-    //==========================================================================
-    // CSI2 Interface Signal Assignments
-    //==========================================================================
+    // CSI2
     assign max_v_count      = reg_max_v_count;
     assign max_h_count      = reg_max_h_count;
     assign csi2_word_count  = reg_csi2_word_count;
 
-    //==========================================================================
-    // TI ROIC Basic Control Signal Assignments
-    //==========================================================================
-    assign ti_roic_sync     = reg_ti_roic_sync[0];       // Use bit 0 only
-    assign ti_roic_tp_sel   = reg_ti_roic_tp_sel[0];     // Use bit 0 only
-    assign ti_roic_str      = reg_ti_roic_str[1:0];      // 2-bit output
-    assign ti_roic_reg_addr = reg_ti_roic_reg_addr;      // Full 16-bit
-    assign ti_roic_reg_data = reg_ti_roic_reg_data;      // Full 16-bit
+    // TI ROIC Basic
+    assign ti_roic_sync     = reg_ti_roic_sync[0];
+    assign ti_roic_tp_sel   = reg_ti_roic_tp_sel[0];
+    assign ti_roic_str      = reg_ti_roic_str[1:0];
+    assign ti_roic_reg_addr = reg_ti_roic_reg_addr;
+    assign ti_roic_reg_data = reg_ti_roic_reg_data;
 
-    //==========================================================================
-    // Sequence LUT Interface Signal Assignments
-    //==========================================================================
-    assign seq_lut_addr     = reg_seq_lut_addr;          // 8-bit address
+    // Sequence LUT
+    assign seq_lut_addr     = reg_seq_lut_addr;
     assign seq_lut_data     = {reg_seq_lut_data_3, reg_seq_lut_data_2, 
-                               reg_seq_lut_data_1, reg_seq_lut_data_0}; // 64-bit combined
-    assign seq_lut_wr_en    = seq_lut_data_wr_pulse;     // Write pulse
-    assign seq_lut_control  = reg_seq_lut_control;       // Control register
-    assign seq_lut_config_done = reg_seq_lut_control[0]; // Bit 0 indicates done
+                               reg_seq_lut_data_1, reg_seq_lut_data_0};
+    assign seq_lut_wr_en    = seq_lut_data_wr_pulse;
+    assign seq_lut_control  = reg_seq_lut_control;
+    assign seq_lut_config_done = reg_seq_lut_control[0];
 
-    //==========================================================================
-    // Acquisition Mode Signal Assignments
-    //==========================================================================
-    assign acq_mode         = reg_acq_mode;              // 3-bit mode
-    assign acq_expose_size  = {16'd0, reg_expose_size};  // Extended to 32-bit
+    // Acquisition
+    assign acq_mode         = reg_acq_mode;
+    assign acq_expose_size  = {16'd0, reg_expose_size};
 
-    //==========================================================================
-    // TI ROIC Deserializer Control Signal Assignments
-    //==========================================================================
-    assign ti_roic_deser_reset      = reg_ti_roic_deser_reset[0];       // Use bit 0
-    assign ti_roic_deser_dly_tap_ld = reg_ti_roic_deser_dly_tap_ld[0];  // Use bit 0
-    assign ti_roic_deser_dly_tap_in = reg_ti_roic_deser_dly_tap_in[4:0];// 5-bit output
-    assign ti_roic_deser_dly_data_ce = reg_ti_roic_deser_dly_data_ce[0];// Use bit 0
-    assign ti_roic_deser_dly_data_inc= reg_ti_roic_deser_dly_data_inc[0];// Use bit 0
-    assign ti_roic_deser_align_mode = reg_ti_roic_deser_align_mode[0];  // Use bit 0
-    assign ti_roic_deser_align_start= reg_ti_roic_deser_align_start[0]; // Use bit 0
-    
-    // Shift set outputs [11:0]
+    // TI ROIC Deserializer
+    assign ti_roic_deser_reset      = reg_ti_roic_deser_reset[0];
+    assign ti_roic_deser_dly_tap_ld = reg_ti_roic_deser_dly_tap_ld[0];
+    assign ti_roic_deser_dly_tap_in = reg_ti_roic_deser_dly_tap_in[4:0];
+    assign ti_roic_deser_dly_data_ce = reg_ti_roic_deser_dly_data_ce[0];
+    assign ti_roic_deser_dly_data_inc= reg_ti_roic_deser_dly_data_inc[0];
+    assign ti_roic_deser_align_mode = reg_ti_roic_deser_align_mode[0];
+    assign ti_roic_deser_align_start= reg_ti_roic_deser_align_start[0];
     assign ti_roic_deser_shift_set[0]  = reg_ti_roic_deser_shift_set[0][4:0];
     assign ti_roic_deser_shift_set[1]  = reg_ti_roic_deser_shift_set[1][4:0];
     assign ti_roic_deser_shift_set[2]  = reg_ti_roic_deser_shift_set[2][4:0];
@@ -372,17 +287,12 @@ module reg_map_refacto (
     assign ti_roic_deser_shift_set[10] = reg_ti_roic_deser_shift_set[10][4:0];
     assign ti_roic_deser_shift_set[11] = reg_ti_roic_deser_shift_set[11][4:0];
 
-    //==========================================================================
-    // Back Bias Signal Assignments
-    //==========================================================================
+    // Back Bias
     assign up_back_bias = reg_up_back_bias;
     assign dn_back_bias = reg_dn_back_bias;
 
-    //==========================================================================
-    // Image Command Signal Assignments
-    //==========================================================================
-    // Register bit extractions
-    assign sig_get_bright   = reg_sys_cmd_reg[2];   // Bit 2: get_bright trigger
+    // Image Command
+    assign sig_get_bright   = reg_sys_cmd_reg[2];
     assign soft_trigger     = reg_sys_cmd_reg[3];   // Bit 3: soft trigger
     
     // Image command outputs
@@ -501,8 +411,7 @@ module reg_map_refacto (
         if (!rst) begin
             reg_op_mode_reg <= `DEF_OP_MODE_REG;
         end else begin
-            if (fsm_rst_index)
-                reg_op_mode_reg <= register_memory[`ADDR_OP_MODE_REG];
+            reg_op_mode_reg <= register_memory[`ADDR_OP_MODE_REG];
         end
     end
 
@@ -685,33 +594,13 @@ module reg_map_refacto (
     end
 
     //==========================================================================
-    // GATE Control Register Buffering (eim_clk → fsm_clk)
+    // GATE Control Register (fsm_clk domain - CDC from register_memory)
     //==========================================================================
-    wire [15:0] sig_reg_addr = reg_addr[15:0];
-    wire up_set_gate = (sig_reg_addr == `ADDR_SET_GATE);
-    wire up_gate_size = (sig_reg_addr == `ADDR_GATE_SIZE);
-
-    reg [15:0] buf_set_gate;
-    always @(posedge eim_clk or negedge eim_rst) begin
-        if (!eim_rst)
-            buf_set_gate <= `DEF_SET_GATE;
-        else if (up_set_gate && reg_data_index)
-            buf_set_gate <= reg_data;
-    end
-
-    always @(posedge eim_clk or negedge eim_rst) begin
-        if (!eim_rst)
-            buf_gate_size <= `DEF_GATE_SIZE;
-        else if (up_gate_size && reg_data_index)
-            buf_gate_size <= reg_data;
-    end
-
     always @(posedge fsm_clk or negedge rst) begin
         if (!rst) begin
             reg_set_gate <= `DEF_SET_GATE;
         end else begin
-            if (fsm_rst_index)
-                reg_set_gate <= buf_set_gate;
+            reg_set_gate <= register_memory[`ADDR_SET_GATE];
         end
     end
 
@@ -719,8 +608,7 @@ module reg_map_refacto (
         if (!rst) begin
             reg_gate_size <= `DEF_GATE_SIZE;
         end else begin
-            if (fsm_rst_index)
-                reg_gate_size <= buf_gate_size;
+            reg_gate_size <= register_memory[`ADDR_GATE_SIZE];
         end
     end
 
@@ -735,11 +623,11 @@ module reg_map_refacto (
     
     always @(posedge eim_clk or negedge eim_rst) begin
         if (!eim_rst) begin
-            prev_reg_addr         <= 16'd0;
+            // prev_reg_addr         <= 16'd0;
             seq_lut_data_wr_pulse <= 1'b0;
             seq_lut_wr_pulse_cnt  <= 2'd0;
         end else begin
-            prev_reg_addr <= current_reg_addr;
+            // prev_reg_addr <= current_reg_addr;
             
             // Detect write to DATA_0~3 registers
             if (reg_data_index && !reg_read_index && 
@@ -1046,54 +934,80 @@ module reg_map_refacto (
     assign s_fpga_ver_data = fpga_ver_data;
 
     //==========================================================================
-    // TODO: Remaining Implementation (Dec 11, 2025)
+    // TODO: Implementation Plan (Dec 18, 2025)
     //==========================================================================
-    // Completed: 43/155 (28%) | Remaining: 112 outputs
+    // Current Status: 43/97 outputs implemented (44%)
     //==========================================================================
     
-    // ========== TODO 1: System Control (22 outputs remaining) ==========
+    // ========== NOT IMPLEMENTED - Original Design (Complex FSM Logic) ==========
+    // These features require complex FSM logic and additional inputs:
     //
-    // 1.1 System Enables (7) - 0x0005, 0x00B9
-    //     [ ] en_pwr_dwn, en_pwr_off, en_aed, aed_test_mode1/2
-    //     [ ] en_back_bias, en_flush (zero check on 0x0010~0x0011)
-    // 1.2 GATE Control (17) - 0x0003~0x0004, 0x0082
-    //     [ ] gate_mode1/2, gate_cs1/2, gate_sel, gate_ud, gate_stv_mode, gate_oepsn
-    //     [ ] gate_lr1/2, stv_sel_h, stv_sel_l1/r1/l2/r2
-    //     [ ] gate_size, gate_gpio_data
-    // 1.3 AED Threshold (6) - 0x0013~0x001A
-    //     [ ] aed_th, nega_aed_th, posi_aed_th, sel_aed_roic, sel_aed_test_roic
-    //     [ ] num_trigger (decrement), ready_aed_read (0→1), aed_dark_delay (0→1, dec)
-    // 1.4 AED Gate XAO (12) - 0x0040~0x004B
-    //     [ ] dn_aed_gate_xao_0~5, up_aed_gate_xao_0~5
-    // 1.5 Switch Sync (2) - 0x00EA~0x00EB
-    //     [ ] up_switch_sync, dn_switch_sync
-    //     [✓] exp_ack (inverted exp_req)
+    // [x] cycle_width[23:0] - FSM state mux, needs readout_width[23:0] input
+    // [x] mux_image_height - Calculated value based on FSM state
+    // [x] dsp_image_height - CDC from eim_clk to fsm_clk
+    // [x] frame_rpt - Calculated as N-1
+    // [x] readout_count - Direct register read (0x0006)
+    // [x] saturation_flush_repeat - Direct register read (0x0018)
+    //==========================================================================
     
-    // ========== TODO 2: Timing Control (6 outputs) ==========
+    // ========== NOT IMPLEMENTED - Output Ports (21 signals) ==========
     //
-    // 2.1 Timing Control (4) - FSM-dependent mux logic
-    //     [ ] cycle_width[23:0] - FSM state mux (needs readout_width input)
-    //     [ ] mux_image_height, dsp_image_height (CDC), frame_rpt
-    // 2.2 Direct Timing (2) - 0x0006, 0x0018
-    //     [ ] readout_count, saturation_flush_repeat
-    
-    // ========== TODO 3: TI ROIC (5 outputs) ==========
+    // System Control (7 signals)
+    // [x] en_pwr_dwn, en_pwr_off (PWR_OFF_DWN[1:0])
+    // [x] en_aed (OP_MODE_REG[0])
+    // [x] aed_test_mode1, aed_test_mode2 (OP_MODE_REG[7:8])
+    // [x] en_back_bias, en_flush (calculated: BACK_BIAS_SIZE/IMAGE_HEIGHT != 0)
     //
-    // 3.1 ROIC Burst & Timing (3) - 0x0090~0x0092
-    //     [ ] roic_burst_cycle, start_roic_burst_clk, end_roic_burst_clk
-    // 3.2 IO Delay (2) - 0x00DC
-    //     [ ] ld_io_delay_tab (pulse), io_delay_tab[4:0]
+    // AED Control (8 signals)
+    // [x] aed_th (0x001D)
+    // [x] nega_aed_th, posi_aed_th (calculated from aed_th)
+    // [x] sel_aed_roic (0x0013)
+    // [x] sel_aed_test_roic (0x0015)
+    // [x] num_trigger (0x0014, with decrement logic)
+    // [x] ready_aed_read (0x0018, 0→1 transition)
+    // [x] aed_dark_delay (0x001C, 0→1 transition and decrement)
+    //
+    // ROIC Burst (3 signals)
+    // [x] roic_burst_cycle (0x0090)
+    // [x] start_roic_burst_clk (0x0091)
+    // [x] end_roic_burst_clk (0x0092)
+    //
+    // IO Delay (2 signals)
+    // [x] ld_io_delay_tab (pulse generation on 0x00DC write)
+    // [x] io_delay_tab[4:0] (0x00DC[4:0])
+    //
+    // Switch Sync (2 signals)
+    // [x] up_switch_sync (0x00EA)
+    // [x] dn_switch_sync (0x00EB)
+    //
+    //==========================================================================
     
-    // ========== TODO 4: New Inputs (1) ==========
+    // ========== NOT IMPLEMENTED - Internal Logic ==========
+    //
+    // [x] AED control CDC (eim_clk → fsm_clk) for 8 signals
+    // [x] num_trigger decrement logic
+    // [x] ready_aed_read 0→1 transition logic
+    // [x] aed_dark_delay 0→1 transition and decrement
+    // [x] ROIC burst CDC (eim_clk → fsm_clk) for 3 signals
+    // [x] IO delay pulse generation (ld_io_delay_tab)
+    // [x] Switch sync CDC (eim_clk → fsm_clk) for 2 signals
+    //
+    //==========================================================================
     
-    // 4.1 Timing Inputs (1)
-    //     [ ] readout_width[23:0] (for cycle_width)
-    //     [✓] exp_req (added for exp_ack)
+    // ========== NOT IMPLEMENTED - p_define_refacto.sv Additions ==========
+    //
+    // [x] AED register addresses: READY_AED_READ, AED_TH, SEL_AED_ROIC, 
+    //     NUM_TRIGGER, SEL_AED_TEST_ROIC, AED_DARK_DELAY
+    // [x] ROIC burst addresses: ROIC_BURST_CYCLE, START_ROIC_BURST_CLK, 
+    //     END_ROIC_BURST_CLK
+    // [x] SWITCH_SYNC_UP, SWITCH_SYNC_DN addresses
+    //
+    //==========================================================================
     
-    // ========== TODO 5: Architecture ==========
-    // 5.1 CDC (~30 signals) - eim_clk → fsm_clk
-    // 5.2 Pulse Generation - ld_io_delay_tab
-    // 5.3 Value Logic - ready_aed_read (0→1), aed_dark_delay (0→1,dec), num_trigger (dec), frame_rpt (N-1)
+    // ========== REMAINING WORK (1 item) ==========
+    //
+    // [ ] System enables assign statements (already declared, just need assignments)
+    //
     //==========================================================================
 
 endmodule

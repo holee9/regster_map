@@ -1,58 +1,51 @@
 //==============================================================================
-// Project     : BLUE Platform - X-ray Detector System
-// Module      : p_define_refacto.sv
-// Description : Global Parameter Definitions with Macro-based Optimization
-//
-// Copyright (c) 2024-2025 H&abyz Inc.
-// All rights reserved.
-//
-// Author      : drake.lee (holee9@gmail.com)
-// Company     : H&abyz Inc.
-// Created     : 2024-01-10
-// Modified    : 2025-12-05
-//
+// p_define_refacto.sv - Macro-based Register Definitions
 //==============================================================================
-// Version History
+// Unified ADDR_* and DEF_* definitions using macros for maintainability
+// - DEFREG(name, addr, default): R/W register
+// - DEFREG_RO(name, addr): Read-only register
+// - Pattern macros: DEFGATE_GROUP, DEFROIC_ACLK, DEFTI_ROIC_REG
 //==============================================================================
-// Version | Date       | Author     | Description
-//---------|------------|------------|--------------------------------------------
-// 0.0     | 2024-01-10 | drake.lee  | Initial release
-// 0.1     | 2024-03-20 | drake.lee  | RAON project release
-// 0.2     | 2024-06-20 | drake.lee  | BLUE project release
-// 0.3     | 2025-12-05 | drake.lee  | Refactored with macro optimization
-//         |            |            | - Unified address and default value definitions
-//         |            |            | - Introduced pattern-based macro groups
-//         |            |            | - Reduced code size by ~31%
-//==============================================================================
-// Features
-//==============================================================================
-// - Single ROIC readout (TI ROIC ADI)
-// - CSI2 interface: 2-pixel, 4-lane configuration
-// - Macro-based register definition for maintainability
-// - Conditional compilation for simulation and hardware targets
-// - Comprehensive register map (512 addresses)
-//
+
+`define TI_ROIC
+
 //==============================================================================
 // Configuration
 //==============================================================================
 
-// `define TB_SIM
-`define TI_ROIC
+`ifdef TB_SIM
+    `define INIT_DELAY          25'd25          // 1us @ 40ns
+    `define MORE_DELAY          25'd500         // 20us @ 40ns
+    `define FULL_CYCLE_WIDTH    24'd20          // Test
+    `define MIN_UNIT            24'd250         // Test
+`else
+    `define INIT_DELAY          25'd2500000     // 100ms @ 40ns
+    `define MORE_DELAY          25'd2500000     // 100ms @ 40ns
+    `define FULL_CYCLE_WIDTH    24'd2000000     // 100ms @ 20MHz
+    `define MIN_UNIT            24'd200000      // 10ms @ 20MHz
+`endif
 
-//----------------------------------------
-// Macro Definitions for Register Management
-//----------------------------------------
+`define AED_READ_ADDED_LINES    16'h5
+`define MAX_ADDR                16'd512
 
-// Define register with address and default value
-// Usage: `DEFREG(NAME, ADDRESS, DEFAULT_VALUE)
-// Creates: `ADDR_NAME and `DEF_NAME
+// Version Info (Read-Only)
+`define PURPOSE                 16'h4753        // "GS"
+`define SIZE_1                  16'h3137        // "17"
+`define SIZE_2                  16'h3137        // "17"
+`define MAJOR_REV               16'h3031        // "01"
+`define MINOR_REV               16'h3030        // "00"
+`define ROIC_VENDOR             16'h5449        // "TI"
+
+//==============================================================================
+// Register Definition Macros
+//==============================================================================
+
+// R/W register: DEFREG(NAME, ADDR, DEFAULT)
 `define DEFREG(name, addr, defval) \
     `define ADDR_``name  addr \
     `define DEF_``name   defval
 
-// Define read-only register (no default value needed)
-// Usage: `DEFREG_RO(NAME, ADDRESS)
-// Creates: `ADDR_NAME only
+// Read-only register: DEFREG_RO(NAME, ADDR)
 `define DEFREG_RO(name, addr) \
     `define ADDR_``name  addr
 
@@ -355,6 +348,9 @@
 `DEFTI_ROIC_REG(18,     16'h0106, 16'h0001)
 `DEFTI_ROIC_REG(2C,     16'h0107, 16'h0000)
 `DEFTI_ROIC_REG(30,     16'h0108, 16'h0000)
+`DEFTI_ROIC_REG(31,     16'h0109, 16'h0000)
+`DEFTI_ROIC_REG(32,     16'h010A, 16'h0000)
+`DEFTI_ROIC_REG(33,     16'h010B, 16'h0000)
 `DEFTI_ROIC_REG(31,     16'h0109, 16'h0000)
 `DEFTI_ROIC_REG(32,     16'h010A, 16'h0000)
 `DEFTI_ROIC_REG(33,     16'h010B, 16'h0000)
